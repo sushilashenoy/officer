@@ -308,6 +308,49 @@ slide <- R6Class(
       rels <- self$rel_df()
       rels <- rels[basename( rels$type ) == "slideLayout", ]
       data.frame(stringsAsFactors = FALSE, name = self$name(), filename = self$file_name(), layout_file = rels$target)
+    },
+
+    replace_all_text = function(oldValue, newValue, warn, ...) {
+      oldValue <- enc2utf8(oldValue)
+      newValue <- enc2utf8(newValue)
+
+      # Recursive function to search xml document tree for text nodes
+      # containing oldValue and replace all instances with newValue
+      traverse_tree <- function(node) {
+        if ( xml_type(node) == 'text' ) {
+          if ( grepl(oldValue, xml_text(node), ...) ) {
+            xml_text(node) <- gsub(oldValue, newValue, xml_text(node), ...)
+            return ( 1 )
+          }
+          return ( NULL )
+        }
+
+        # If this is an element with no children, bail
+        if (xml_length(node, only_elements = FALSE) == 0)
+          return ( NULL )
+
+        # If none of the descendants of this element have matching text, bail
+        if (!grepl(oldValue, xml_text(node), ...))
+          return ( NULL )
+
+        # Otherwise keep traversing tree
+        res <- lapply(xml_contents(node), traverse_tree)
+
+        # Don't return a huge empty nested list structure
+        res <- res[!sapply(res, is.null)]
+        if ( length(res) == 0 )
+          return ( NULL )
+
+        res
+      }
+
+      replacement_count <- sum(unlist(traverse_tree(self$get())))
+
+      if (replacement_count == 0 && warn) {
+        warning("Found 0 instances of '", oldValue, "'.")
+      }
+
+      self
     }
 
   ),
